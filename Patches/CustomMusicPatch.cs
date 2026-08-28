@@ -25,7 +25,7 @@ namespace MusicExtender.Patches
             {
                 string modPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 
-                string bundlePath = Path.Combine(modPath, "music.bundle");
+                string bundlePath = Path.Combine(modPath, "Resources", "music.bundle");
 
                 if (!File.Exists(bundlePath))
                 {
@@ -61,9 +61,7 @@ namespace MusicExtender.Patches
                     return;
                 }
 
-                AudioClip[] vanillaMusic = musicField.GetValue(__instance) as AudioClip[];
-
-                if (vanillaMusic == null || vanillaMusic.Length == 0)
+                if (musicField.GetValue(__instance) is not AudioClip[] vanillaMusic || vanillaMusic.Length == 0)
                 {
                     Plugin.LogSource.LogWarning("_mainMenuMusic is empty or has not been initialized." );
                     
@@ -74,14 +72,13 @@ namespace MusicExtender.Patches
 
                 if (Plugin.CustomOnly.Value)
                 {
-                    // Custom music only
-                    finalMusic = customMusicClips;
+                    finalMusic = customMusicClips.OrderBy(x => UnityEngine.Random.value).ToArray();
                 }
                 else
                 {
-                    // Vanilla + custom music
                     finalMusic = vanillaMusic
                         .Concat(customMusicClips)
+                        .OrderBy(x => UnityEngine.Random.value)
                         .ToArray();
                 }
 
