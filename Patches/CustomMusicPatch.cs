@@ -101,4 +101,14 @@ namespace MusicExtender.Patches
             }
         }
     }
+    
+    [HarmonyPatch(typeof(GUISounds), "method_9")]
+    public static class HideoutMusicPatch
+    {
+        [HarmonyPrefix]
+        private static bool Prefix()
+        {
+            return !Plugin.PlayInHideout.Value;
+        }
+    }
 }
