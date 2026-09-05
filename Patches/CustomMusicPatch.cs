@@ -27,22 +27,25 @@ namespace MusicExtender.Patches
             try
             {
                 string modPath = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                string bundlePath = Path.Combine(modPath, "Resources", "music.bundle");
-
-                if (!File.Exists(bundlePath))
+                if (modPath != null)
                 {
-                    Plugin.LogSource.LogWarning($"Music bundle not found: {bundlePath}. Make sure you put bundle in the Resources folder.");
-                    _isInitialized = true;
-                    return false;
-                }
+                    string bundlePath = Path.Combine(modPath, "Resources", "music.bundle");
 
-                _musicBundle = AssetBundle.LoadFromFile(bundlePath);
+                    if (!File.Exists(bundlePath))
+                    {
+                        Plugin.LogSource.LogWarning($"Music bundle not found: {bundlePath}. Make sure you put bundle in the Resources folder.");
+                        _isInitialized = true;
+                        return false;
+                    }
 
-                if (!_musicBundle)
-                {
-                    Plugin.LogSource.LogError($"Failed to load music bundle: {bundlePath}");
-                    _isInitialized = true;
-                    return false;
+                    _musicBundle = AssetBundle.LoadFromFile(bundlePath);
+
+                    if (!_musicBundle)
+                    {
+                        Plugin.LogSource.LogError($"Failed to load music bundle: {bundlePath}");
+                        _isInitialized = true;
+                        return false;
+                    }
                 }
 
                 _customMusicClips = _musicBundle.LoadAllAssets<AudioClip>();
@@ -132,6 +135,7 @@ namespace MusicExtender.Patches
     [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.PlayMenuBackgroundMusic))]
     public static class MenuMusicPlayPatch
     {
+        // ReSharper disable once InconsistentNaming
         [HarmonyPrefix]
         private static bool Prefix(GUISounds __instance)
         {
@@ -160,7 +164,7 @@ namespace MusicExtender.Patches
                 if (MusicManager.IsInitialized && MusicManager.CustomMusicClips != null && MusicManager.CustomMusicClips.Length > 0)
                 {
                     var finalMusic = MusicManager.GetCombinedPlaylist(vanillaMusic, Plugin.CustomOnly.Value);
-                    if (finalMusic != null && finalMusic.Length > 0)
+                    if (finalMusic is { Length: > 0 })
                     {
                         musicField.SetValue(__instance, finalMusic);
 
@@ -173,7 +177,7 @@ namespace MusicExtender.Patches
                             {
                                 var audioSource = audioSourceField.GetValue(__instance) as AudioSource;
                                 
-                                if (audioSource != null)
+                                if (audioSource)
                                 {
                                     int currentIndex = (int)currentIndexField.GetValue(__instance);
                                     int newIndex;
@@ -226,6 +230,7 @@ namespace MusicExtender.Patches
     [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.StopMenuBackgroundMusicWithDelay))]
     public static class StopMenuBackgroundMusicWithDelayPatch
     {
+        // ReSharper disable once InconsistentNaming
         [HarmonyPrefix]
         private static void Prefix(GUISounds __instance, float transitionTime, Action callback)
         {
@@ -282,6 +287,7 @@ namespace MusicExtender.Patches
     public static class PlayMenuBackgroundMusicDelayedPatch
     {
         [HarmonyPrefix]
+        // ReSharper disable once InconsistentNaming
         private static void Prefix(GUISounds __instance, float delay, Action callback)
         {
             Plugin.LogSource.LogDebug($"PlayMenuBackgroundMusicDelayed called with delay: {delay}");
