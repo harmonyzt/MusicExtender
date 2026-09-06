@@ -18,6 +18,9 @@ namespace MusicExtender.Patches
 
         public static bool IsInitialized => _isInitialized;
         public static AudioClip[] CustomMusicClips => _customMusicClips;
+        private static AudioClip[] _playlist;
+        public static AudioClip[] Playlist => _playlist;
+        
 
         public static bool LoadMusicBundle()
         {
@@ -67,6 +70,28 @@ namespace MusicExtender.Patches
                 _isInitialized = true;
                 return false;
             }
+        }
+        
+        public static bool BuildPlaylist(AudioClip[] vanillaMusic, bool customOnly)
+        {
+            if (_customMusicClips == null || _customMusicClips.Length == 0)
+                return false;
+
+            if (customOnly)
+            {
+                _playlist = _customMusicClips
+                    .OrderBy(x => UnityEngine.Random.value)
+                    .ToArray();
+            }
+            else
+            {
+                _playlist = vanillaMusic
+                    .Concat(_customMusicClips)
+                    .OrderBy(x => UnityEngine.Random.value)
+                    .ToArray();
+            }
+
+            return _playlist.Length > 0;
         }
 
         public static AudioClip[] GetCombinedPlaylist(AudioClip[] vanillaMusic, bool customOnly)
@@ -135,8 +160,8 @@ namespace MusicExtender.Patches
     [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.PlayMenuBackgroundMusic))]
     public static class MenuMusicPlayPatch
     {
-        // ReSharper disable once InconsistentNaming
         [HarmonyPrefix]
+        // ReSharper disable once InconsistentNaming
         private static bool Prefix(GUISounds __instance)
         {
             try
@@ -146,128 +171,154 @@ namespace MusicExtender.Patches
                     return true;
                 }
 
+                if (MusicManager.CustomMusicClips == null || MusicManager.CustomMusicClips.Length == 0)
+                {
+                    return true;
+                }
+
                 var musicField = AccessTools.Field(typeof(GUISounds), "_mainMenuMusic");
-                if (musicField == null)
+                var audioSourceField = AccessTools.Field(typeof(GUISounds), "audioSource_3");
+                var currentIndexField = AccessTools.Field( typeof(GUISounds), "_currentMusicIndex");
+
+                if (musicField == null ||
+                    audioSourceField == null ||
+                    currentIndexField == null)
                 {
-                    Plugin.LogSource.LogError("Cant find GUISounds._mainMenuMusic");
+                    Plugin.LogSource.LogError("Could not find GUISounds music fields.");
+
                     return true;
                 }
 
-                // Get current vanilla music array
                 var vanillaMusic = musicField.GetValue(__instance) as AudioClip[];
-                if (vanillaMusic == null || vanillaMusic.Length == 0)
+
+                if (vanillaMusic == null ||
+                    vanillaMusic.Length == 0)
                 {
-                    Plugin.LogSource.LogWarning("_mainMenuMusic is empty");
+                    Plugin.LogSource.LogWarning("_mainMenuMusic is empty.");
+
                     return true;
                 }
-                
-                if (MusicManager.IsInitialized && MusicManager.CustomMusicClips != null && MusicManager.CustomMusicClips.Length > 0)
-                {
-                    var finalMusic = MusicManager.GetCombinedPlaylist(vanillaMusic, Plugin.CustomOnly.Value);
-                    if (finalMusic is { Length: > 0 })
-                    {
-                        musicField.SetValue(__instance, finalMusic);
 
-                        if (musicField.GetValue(__instance) is AudioClip[] updatedMusic && updatedMusic.Length > 0)
-                        {
-                            var audioSourceField = AccessTools.Field(typeof(GUISounds), "audioSource_3");
-                            var currentIndexField = AccessTools.Field(typeof(GUISounds), "_currentMusicIndex");
-                            
-                            if (audioSourceField != null && currentIndexField != null)
-                            {
-                                var audioSource = audioSourceField.GetValue(__instance) as AudioSource;
-                                
-                                if (audioSource)
-                                {
-                                    int currentIndex = (int)currentIndexField.GetValue(__instance);
-                                    int newIndex;
-                                    do
-                                    {
-                                        newIndex = UnityEngine.Random.Range(0, updatedMusic.Length);
-                                    } while (updatedMusic.Length > 1 && newIndex == currentIndex);
-                                    
-                                    currentIndexField.SetValue(__instance, newIndex);
-                                    AudioClip clip = updatedMusic[newIndex];
-                                    
-                                    // Stop and play new clip just in case because i cant figure out why the fuck we get no audio on the end of the raid
-                                    __instance.StopAudioCallbackCoroutine();
-                                    
-                                    audioSource.Stop();
-                                    audioSource.clip = clip;
-                                    audioSource.volume = 1f;
-                                    audioSource.Play();
-                                    
-                                    var waitMethod = typeof(StaticManager).GetMethod("WaitSeconds", new Type[] { typeof(float), typeof(Action) });
-                                    if (waitMethod != null)
-                                    {
-                                        var coroutine = waitMethod.Invoke(StaticManager.Instance, new object[] { clip.length, new Action(__instance.PlayMenuBackgroundMusic) });
-                                        var delayedField = AccessTools.Field(typeof(GUISounds), "_delayedAudioCallbackCoroutine");
-                                        if (delayedField != null)
-                                        {
-                                            delayedField.SetValue(__instance, coroutine);
-                                        }
-                                    }
-                                    
-                                    Plugin.LogSource.LogInfo($"Playing music track: {clip.name}");
-                                    return false;
-                                }
-                            }
-                        }
+                // Build playlist
+                if (MusicManager.Playlist == null)
+                {
+                    if (!MusicManager.BuildPlaylist(vanillaMusic, Plugin.CustomOnly.Value))
+                    {
+                        return true;
                     }
+
+                    // Keep GUISounds pointing at playlist
+                    musicField.SetValue(__instance, MusicManager.Playlist);
                 }
 
-                // original method
-                return true;
+                var playlist = MusicManager.Playlist;
+
+                if (playlist == null || playlist.Length == 0)
+                    return true;
+
+                var audioSource = audioSourceField.GetValue(__instance) as AudioSource;
+
+                if (!audioSource)
+                    return true;
+
+                int currentIndex = (int)currentIndexField.GetValue(__instance);
+                int newIndex;
+
+                if (playlist.Length == 1)
+                {
+                    newIndex = 0;
+                }
+                else
+                {
+                    do
+                    {
+                        newIndex = UnityEngine.Random.Range(0, playlist.Length);
+                    } while (newIndex == currentIndex);
+                }
+
+                currentIndexField.SetValue(__instance, newIndex);
+
+                AudioClip clip = playlist[newIndex];
+
+                if (!clip)
+                    return false;
+                
+                __instance.StopAudioCallbackCoroutine();
+
+                // Stop current playback FOR THE LOVE OF GOD
+                audioSource.Stop();
+                audioSource.clip = clip;
+                audioSource.volume = 1f;
+                audioSource.Play();
+
+                // Schedule the NEXT track
+                var callback = new Action(__instance.PlayMenuBackgroundMusic);
+                var nextTrackCoroutine = StaticManager.Instance.WaitSeconds(clip.length,callback);
+                var delayedField = AccessTools.Field(typeof(GUISounds), "_delayedAudioCallbackCoroutine");
+
+                delayedField?.SetValue(__instance, nextTrackCoroutine);
+
+                Plugin.LogSource.LogInfo($"Playing music track: {clip.name}");
+                
+                return false;
             }
             catch (Exception ex)
             {
-                Plugin.LogSource.LogError($"Error in MenuMusicPlayPatch: {ex}");
+                Plugin.LogSource.LogError(
+                    $"Error in MenuMusicPlayPatch: {ex}");
+
                 return true;
             }
         }
+        
+        
     }
-    
+        
     [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.StopMenuBackgroundMusicWithDelay))]
     public static class StopMenuBackgroundMusicWithDelayPatch
     {
-        // ReSharper disable once InconsistentNaming
         [HarmonyPrefix]
-        private static void Prefix(GUISounds __instance, float transitionTime, Action callback)
+        // ReSharper disable once InconsistentNaming
+        private static bool Prefix(GUISounds __instance, float transitionTime, Action callback)
         {
-            //Plugin.LogSource.LogDebug($"StopMenuBackgroundMusicWithDelay called, trans time: {transitionTime}");
-            
-            // if we have actually custom music, delay it ourselves (and fade)
-            if (MusicManager.IsInitialized && MusicManager.CustomMusicClips != null && MusicManager.CustomMusicClips.Length > 0)
+            if (!MusicManager.IsInitialized || MusicManager.CustomMusicClips == null || MusicManager.CustomMusicClips.Length == 0)
             {
-                try
+                return true;
+            }
+
+            try
+            {
+                var audioSourceField = AccessTools.Field( typeof(GUISounds), "audioSource_3");
+                var audioSource = audioSourceField?.GetValue(__instance) as AudioSource;
+                
+                __instance.StopAudioCallbackCoroutine();
+
+                if (audioSource != null)
                 {
-                    var audioSourceField = AccessTools.Field(typeof(GUISounds), "audioSource_3");
-                    if (audioSourceField != null)
-                    {
-                        var audioSource = audioSourceField.GetValue(__instance) as AudioSource;
-                        if (audioSource != null && audioSource.isPlaying)
-                        {
-                            MusicFader.FadeAudioSource(audioSource, 0f, transitionTime, __instance);
-                            __instance.StopAudioCallbackCoroutine();
-                            
-                            if (callback != null)
-                            {
-                                __instance.StartCoroutine(DelayedCallback(transitionTime, callback));
-                            }
-                        }
-                    }
+                    MusicFader.FadeAudioSource(audioSource, 0f, transitionTime, __instance);
                 }
-                catch (Exception ex)
+
+                if (callback != null)
                 {
-                    Plugin.LogSource.LogError($"Error in StopMenuBackgroundMusicWithDelayPatch: {ex}");
+                    __instance.StartCoroutine(DelayedCallback( transitionTime, callback));
                 }
+                
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Plugin.LogSource.LogError($"Error in StopMenuBackgroundMusicWithDelayPatch: {ex}");
+
+                return true;
             }
         }
 
-        // helper
-        private static IEnumerator DelayedCallback(float delay, Action callback)
+        private static IEnumerator DelayedCallback(
+            float delay,
+            Action callback)
         {
             yield return new WaitForSeconds(delay);
+
             callback?.Invoke();
         }
     }
@@ -288,39 +339,52 @@ namespace MusicExtender.Patches
     {
         [HarmonyPrefix]
         // ReSharper disable once InconsistentNaming
-        private static void Prefix(GUISounds __instance, float delay, Action callback)
+        private static bool Prefix(GUISounds __instance, float delay, Action callback)
         {
-            Plugin.LogSource.LogDebug($"PlayMenuBackgroundMusicDelayed called with delay: {delay}");
-            
-            // If we have custom music, handle it ourselves
-            if (MusicManager.IsInitialized && MusicManager.CustomMusicClips != null && MusicManager.CustomMusicClips.Length > 0)
+            if (!MusicManager.IsInitialized && !MusicManager.LoadMusicBundle())
             {
-                try
+                return true;
+            }
+
+            if (MusicManager.CustomMusicClips == null || MusicManager.CustomMusicClips.Length == 0)
+            {
+                return true;
+            }
+
+            try
+            {
+                // Cancel vanilla timer
+                var playDelayField = AccessTools.Field(typeof(GUISounds),"_playMusicDelayCoroutine");
+
+                if (playDelayField != null)
                 {
-                    var playDelayField = AccessTools.Field(typeof(GUISounds), "_playMusicDelayCoroutine");
-                    if (playDelayField != null)
+                    var existing = playDelayField.GetValue(__instance) as IEnumerator;
+
+                    if (existing != null)
                     {
-                        var existingCoroutine = playDelayField.GetValue(__instance) as Coroutine;
-                        if (existingCoroutine != null)
-                        {
-                            __instance.StopCoroutine(existingCoroutine);
-                            playDelayField.SetValue(__instance, null);
-                        }
+                        __instance.StopCoroutine(existing);
+                        playDelayField.SetValue(__instance, null);
                     }
-                    __instance.StartCoroutine(DelayedPlayMusic(__instance, delay, callback));
                 }
-                catch (Exception ex)
-                {
-                    Plugin.LogSource.LogError($"Error in PlayMenuBackgroundMusicDelayedPatch: {ex}");
-                }
+
+                // Start only our timer
+                __instance.StartCoroutine(DelayedPlayMusic(__instance, delay, callback));
+                
+                // Prevent vanilla PlayMenuBackgroundMusicDelayed
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Plugin.LogSource.LogError($"Error in PlayMenuBackgroundMusicDelayedPatch: {ex}");
+                
+                return true;
             }
         }
 
-        // Helper
         private static IEnumerator DelayedPlayMusic(GUISounds instance, float delay, Action callback)
         {
             yield return new WaitForSeconds(delay);
-            
+
             instance.PlayMenuBackgroundMusic();
             callback?.Invoke();
         }
