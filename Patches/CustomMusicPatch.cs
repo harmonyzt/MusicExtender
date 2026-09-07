@@ -94,24 +94,24 @@ namespace MusicExtender.Patches
             return _playlist.Length > 0;
         }
 
-        public static AudioClip[] GetCombinedPlaylist(AudioClip[] vanillaMusic, bool customOnly)
-        {
-            if (_customMusicClips == null || _customMusicClips.Length == 0)
-                return vanillaMusic ?? [];
-
-            if (vanillaMusic == null || vanillaMusic.Length == 0)
-                return customOnly ? _customMusicClips : [];
-
-            if (customOnly)
-            {
-                return _customMusicClips.OrderBy(x => UnityEngine.Random.value).ToArray();
-            }
-
-            return vanillaMusic
-                .Concat(_customMusicClips)
-                .OrderBy(x => UnityEngine.Random.value)
-                .ToArray();
-        }
+        // public static AudioClip[] GetCombinedPlaylist(AudioClip[] vanillaMusic, bool customOnly)
+        // {
+        //     if (_customMusicClips == null || _customMusicClips.Length == 0)
+        //         return vanillaMusic ?? [];
+        //
+        //     if (vanillaMusic == null || vanillaMusic.Length == 0)
+        //         return customOnly ? _customMusicClips : [];
+        //
+        //     if (customOnly)
+        //     {
+        //         return _customMusicClips.OrderBy(x => UnityEngine.Random.value).ToArray();
+        //     }
+        //
+        //     return vanillaMusic
+        //         .Concat(_customMusicClips)
+        //         .OrderBy(x => UnityEngine.Random.value)
+        //         .ToArray();
+        // }
     }
 
     public static class MusicFader
@@ -157,7 +157,7 @@ namespace MusicExtender.Patches
         }
     }
     
-    [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.PlayMenuBackgroundMusic))]
+    [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.method_3))]
     public static class MenuMusicPlayPatch
     {
         [HarmonyPrefix]
@@ -176,9 +176,9 @@ namespace MusicExtender.Patches
                     return true;
                 }
 
-                var musicField = AccessTools.Field(typeof(GUISounds), "_mainMenuMusic");
+                var musicField = AccessTools.Field(typeof(GUISounds), "audioClip_0");
                 var audioSourceField = AccessTools.Field(typeof(GUISounds), "audioSource_3");
-                var currentIndexField = AccessTools.Field( typeof(GUISounds), "_currentMusicIndex");
+                var currentIndexField = AccessTools.Field( typeof(GUISounds), "int_0");
 
                 if (musicField == null ||
                     audioSourceField == null ||
@@ -243,7 +243,7 @@ namespace MusicExtender.Patches
                 if (!clip)
                     return false;
                 
-                __instance.StopAudioCallbackCoroutine();
+                __instance.method_8();
 
                 // Stop current playback FOR THE LOVE OF GOD
                 audioSource.Stop();
@@ -252,9 +252,9 @@ namespace MusicExtender.Patches
                 audioSource.Play();
 
                 // Schedule the NEXT track
-                var callback = new Action(__instance.PlayMenuBackgroundMusic);
+                var callback = new Action(__instance.method_3);
                 var nextTrackCoroutine = StaticManager.Instance.WaitSeconds(clip.length,callback);
-                var delayedField = AccessTools.Field(typeof(GUISounds), "_delayedAudioCallbackCoroutine");
+                var delayedField = AccessTools.Field(typeof(GUISounds), "coroutine_0");
 
                 delayedField?.SetValue(__instance, nextTrackCoroutine);
 
@@ -291,7 +291,7 @@ namespace MusicExtender.Patches
                 var audioSourceField = AccessTools.Field( typeof(GUISounds), "audioSource_3");
                 var audioSource = audioSourceField?.GetValue(__instance) as AudioSource;
                 
-                __instance.StopAudioCallbackCoroutine();
+                __instance.method_8();
 
                 if (audioSource != null)
                 {
@@ -334,7 +334,7 @@ namespace MusicExtender.Patches
         }
     }
     
-    [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.PlayMenuBackgroundMusicDelayed))]
+    [HarmonyPatch(typeof(GUISounds), nameof(GUISounds.method_4))]
     public static class PlayMenuBackgroundMusicDelayedPatch
     {
         [HarmonyPrefix]
@@ -354,7 +354,7 @@ namespace MusicExtender.Patches
             try
             {
                 // Cancel vanilla timer
-                var playDelayField = AccessTools.Field(typeof(GUISounds),"_playMusicDelayCoroutine");
+                var playDelayField = AccessTools.Field(typeof(GUISounds),"ienumerator_0");
 
                 if (playDelayField != null)
                 {
@@ -385,7 +385,7 @@ namespace MusicExtender.Patches
         {
             yield return new WaitForSeconds(delay);
 
-            instance.PlayMenuBackgroundMusic();
+            instance.method_3();
             callback?.Invoke();
         }
     }

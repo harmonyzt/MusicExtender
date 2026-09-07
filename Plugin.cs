@@ -5,7 +5,7 @@ using HarmonyLib;
 
 namespace MusicExtender
 {
-    [BepInPlugin("com.harmonyzt.MusicExtender", "MusicExtender", "1.1.0")]
+    [BepInPlugin("com.harmonyzt.MusicExtender", "MusicExtender", "1.0.3")]
     public class Plugin : BaseUnityPlugin
     {
         public static ManualLogSource LogSource;
