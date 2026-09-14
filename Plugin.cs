@@ -33,7 +33,9 @@ namespace MusicExtender
             new MenuMusicPlayPatch().Enable();
             new StopMenuBackgroundMusicWithDelayPatch().Enable();
             new PlayMenuBackgroundMusicDelayedPatch().Enable();
-            new HideoutMusicPatch().Enable();
+            
+            // method_9 no longer exists in GUISounds, RIP
+            // new HideoutMusicPatch().Enable();
 
             LogSource.LogInfo("Music Extender is loaded.");
         }
