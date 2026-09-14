@@ -1,47 +1,46 @@
 ﻿using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
-using HarmonyLib;
+using BepInEx.Unity.IL2CPP;
+using MusicExtender.Patches;
 
 namespace MusicExtender
 {
-    [BepInPlugin("com.harmonyzt.MusicExtender", "MusicExtender", "1.1.0")]
-    public class Plugin : BaseUnityPlugin
+    [BepInPlugin("com.harmonyzt.MusicExtender", "MusicExtender", "2.0.0")]
+    public class Plugin : BasePlugin
     {
         public static ManualLogSource LogSource;
         public static ConfigEntry<bool> CustomOnly;
         public static ConfigEntry<bool> PlayInHideout;
-        private static Harmony _harmony;
 
-        private void Awake()
+        public override void Load()
         {
-            LogSource = Logger;
-            
-            // yuup. that's me x)
-            _harmony = new Harmony("com.harmonyzt.MusicExtender");
-            _harmony.PatchAll();
+            LogSource = Log;
             
             CustomOnly = Config.Bind(
                 "Music",
                 "Custom Music Only",
                 false,
                 "REQUIRES RESTART. When enabled, only custom music will play. " +
-                "When disabled, custom music is mixed with the vanilla music."
-            );
-            
+                "When disabled, custom music is mixed with the vanilla music.");
+
             PlayInHideout = Config.Bind(
                 "Music",
                 "Play in Hideout",
                 false,
-                "Will keep playing music once you enter hideout."
-            );
+                "Will keep playing music once you enter hideout.");
             
-            Logger.LogInfo("Music Extender is loaded!");
+            new MenuMusicPlayPatch().Enable();
+            new StopMenuBackgroundMusicWithDelayPatch().Enable();
+            new PlayMenuBackgroundMusicDelayedPatch().Enable();
+            new HideoutMusicPatch().Enable();
+
+            LogSource.LogInfo("Music Extender is loaded.");
         }
 
-        private void OnDestroy()
+        public override bool Unload()
         {
-            _harmony?.UnpatchSelf();
+            return true;
         }
     }
 }
