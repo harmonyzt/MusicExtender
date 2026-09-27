@@ -94,6 +94,7 @@ namespace MusicExtender.Patches
             return _playlist.Length > 0;
         }
 
+        // Deprecated
         public static AudioClip[] GetCombinedPlaylist(AudioClip[] vanillaMusic, bool customOnly)
         {
             if (_customMusicClips == null || _customMusicClips.Length == 0)
